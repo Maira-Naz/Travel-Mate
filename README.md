@@ -1,4 +1,4 @@
-# travel_app
+# Travel-Mate
 
 A new Flutter project.
 A mobile-application to plan, track and explore trips.
