@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'services/storage.dart';
 
 class C {
   static const cream = Color(0xFFF6EDDA);
@@ -180,3 +182,43 @@ const thumbs = [
   [Color(0xFFBBD3DE), Color(0xFF7BA7BC)],
   [Color(0xFFE6BD8A), Color(0xFFC98A4A)],
 ];
+
+// ---------------- USER PROFILE (shared, editable) ----------------
+class UserStore {
+  static final name = ValueNotifier<String>('Your Name');
+  static final email = ValueNotifier<String>('you@email.com');
+  static final photo = ValueNotifier<String?>(null); // local file path
+
+  /// Load saved values and auto-save on every change.
+  static void init() {
+    name.value = Store.getString('user_name') ?? name.value;
+    email.value = Store.getString('user_email') ?? email.value;
+    final p = Store.getString('user_photo');
+    photo.value = (p != null && File(p).existsSync()) ? p : null;
+    name.addListener(() => Store.setString('user_name', name.value));
+    email.addListener(() => Store.setString('user_email', email.value));
+    photo.addListener(() => Store.setString('user_photo', photo.value));
+  }
+}
+
+class Avatar extends StatelessWidget {
+  final double radius, fontSize;
+  const Avatar({super.key, this.radius = 28, this.fontSize = 22});
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: Listenable.merge([UserStore.name, UserStore.photo]),
+        builder: (_, __) {
+          final path = UserStore.photo.value;
+          final n = UserStore.name.value.trim();
+          return CircleAvatar(
+            radius: radius,
+            backgroundColor: C.forest,
+            backgroundImage: path != null ? FileImage(File(path)) : null,
+            child: path != null
+                ? null
+                : Text(n.isEmpty ? 'Y' : n[0].toUpperCase(),
+                    style: TextStyle(fontFamily: 'serif', color: C.cream, fontSize: fontSize, fontWeight: FontWeight.w800)),
+          );
+        },
+      );
+}

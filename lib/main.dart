@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'core.dart';
 import 'screens/welcome_screen.dart';
+import 'services/storage.dart';
 
-void main() => runApp(const RoamApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Store.init();
+  UserStore.init();
+  runApp(const RoamApp());
+}
 
 class RoamApp extends StatelessWidget {
   const RoamApp({super.key});

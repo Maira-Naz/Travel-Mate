@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core.dart';
+import '../services/storage.dart';
 
 // ---------------- MAP (placeholder painter; swap for google_maps_flutter later) ----------------
 class MapScreen extends StatefulWidget {
@@ -20,6 +21,19 @@ class _MapScreenState extends State<MapScreen> {
   ];
   bool visited(int i) => _visited.contains(i);
   final _visited = <int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    final saved = Store.getJson('map_visited');
+    if (saved != null) _visited.addAll(List<int>.from(saved));
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    Store.setJson('map_visited', _visited.toList());
+  }
 
   @override
   Widget build(BuildContext context) {

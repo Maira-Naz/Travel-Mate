@@ -30,8 +30,7 @@ class Home extends StatelessWidget {
             Text('Good evening', style: body(16)),
             Text('Where to next?', style: head(32)),
           ])),
-          const CircleAvatar(radius: 28, backgroundColor: C.forest,
-              child: Text('Y', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700))),
+          const Avatar(radius: 28, fontSize: 22),
         ]),
         const SizedBox(height: 22),
         GridView.count(

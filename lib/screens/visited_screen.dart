@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core.dart';
+import '../services/storage.dart';
 
 // ---------------- VISITED / NOT VISITED ----------------
 class VisitedScreen extends StatefulWidget {
@@ -17,6 +18,23 @@ class _VisitedScreenState extends State<VisitedScreen> {
     ['Altit Fort', 'Not yet', false], ['Rakaposhi View Point', 'Not yet', false],
     ['Borith Lake', 'Not yet', false],
   ];
+  @override
+  void initState() {
+    super.initState();
+    final saved = Store.getJson('visited_items');
+    if (saved != null) {
+      items
+        ..clear()
+        ..addAll((saved as List).map((e) => List<dynamic>.from(e)));
+    }
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    Store.setJson('visited_items', items);
+  }
+
   @override
   Widget build(BuildContext context) {
     final vis = items.where((e) => e[2] == true).length;
