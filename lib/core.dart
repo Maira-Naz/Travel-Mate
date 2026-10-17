@@ -29,12 +29,16 @@ class Box extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
         color: color,
+        clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),
             side: BorderSide(color: border ?? C.line)),
         child: InkWell(
             borderRadius: BorderRadius.circular(radius),
             onTap: onTap,
+            hoverColor: const Color(0x246E927F),
+            splashColor: const Color(0x406E927F),
+            highlightColor: const Color(0x2E6E927F),
             child: Padding(padding: padding, child: child)),
       );
 }
@@ -79,13 +83,13 @@ class Btn extends StatelessWidget {
                 onPressed: onTap,
                 style: OutlinedButton.styleFrom(
                     foregroundColor: fg, side: BorderSide(color: fg, width: 1.5),
-                    shape: const StadiumBorder()),
+                    shape: const StadiumBorder()).copyWith(overlayColor: appOverlay),
                 child: Text(label, style: body(16, c: fg, w: FontWeight.w700)))
             : ElevatedButton.icon(
                 onPressed: onTap,
                 icon: Icon(icon, size: icon == null ? 0 : 20, color: fg),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: bg, elevation: 0, shape: const StadiumBorder()),
+                    backgroundColor: bg, elevation: 0, shape: const StadiumBorder()).copyWith(overlayColor: appOverlay),
                 label: Text(label, style: body(16, c: fg, w: FontWeight.w700))),
       );
 }
@@ -159,6 +163,12 @@ const places = [
   Place('Swat Valley', 'Khyber Pakhtunkhwa, Pakistan', 'PKR 32,000', 4.6,
       [Color(0xFFBBD3DE), Color(0xFF356A8A)],
       'Green meadows, rivers and old Buddhist heritage in the north.'),
+  Place('Skardu', 'Gilgit-Baltistan, Pakistan', 'PKR 52,000', 4.7,
+      [Color(0xFFD9E4EA), Color(0xFF3F5E6B)],
+      'Gateway to Deosai, Shangrila Lake and the high peaks of the Karakoram.'),
+  Place('Naran Kaghan', 'Khyber Pakhtunkhwa, Pakistan', 'PKR 28,000', 4.5,
+      [Color(0xFFD8E8D2), Color(0xFF47694F)],
+      'Alpine lakes, Lake Saif-ul-Malook and cool green valleys.'),
 ];
 
 const hotels = [
@@ -220,5 +230,138 @@ class Avatar extends StatelessWidget {
                     style: TextStyle(fontFamily: 'serif', color: C.cream, fontSize: fontSize, fontWeight: FontWeight.w800)),
           );
         },
+      );
+}
+
+// ---------------- INTERACTION HELPERS ----------------
+final emailRx = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+/// Hover (desktop) + press (phone) colours used by all buttons, in the app palette.
+final appOverlay = WidgetStateProperty.resolveWith<Color?>((s) {
+  if (s.contains(WidgetState.pressed)) return const Color(0x382F4A43);
+  if (s.contains(WidgetState.hovered)) return const Color(0x1F2F4A43);
+  return null;
+});
+
+/// Tappable area with hover + pressed feedback. Drop-in replacement for GestureDetector.
+class Tap extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double radius;
+  const Tap({super.key, required this.child, this.onTap, this.radius = 16});
+  @override
+  State<Tap> createState() => _TapState();
+}
+
+class _TapState extends State<Tap> {
+  bool hover = false, down = false;
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        cursor: widget.onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
+        onEnter: (_) => setState(() => hover = true),
+        onExit: (_) => setState(() => hover = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => setState(() => down = true),
+          onTapUp: (_) => setState(() => down = false),
+          onTapCancel: () => setState(() => down = false),
+          onTap: widget.onTap,
+          child: Stack(fit: StackFit.passthrough, children: [
+            widget.child,
+            Positioned.fill(
+                child: IgnorePointer(
+                    child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 120),
+                        decoration: BoxDecoration(
+                            color: down ? const Color(0x476E927F) : (hover ? const Color(0x266E927F) : Colors.transparent),
+                            borderRadius: BorderRadius.circular(widget.radius))))),
+          ]),
+        ),
+      );
+}
+
+/// Switch between bottom-nav tabs from anywhere (0 Home, 1 Trips, 2 Bookings, 3 Profile).
+class TabNav {
+  static final index = ValueNotifier<int>(0);
+}
+
+/// Edit and Delete buttons, clearly separated (gap + divider + different colours).
+class EditDelete extends StatelessWidget {
+  final VoidCallback onEdit, onDelete;
+  const EditDelete({super.key, required this.onEdit, required this.onDelete});
+  Widget _b(IconData i, Color c, Color bg, String tip, VoidCallback f) => Tooltip(
+      message: tip,
+      child: Tap(
+          radius: 22, onTap: f,
+          child: Container(
+              width: 42, height: 42,
+              decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+              child: Icon(i, size: 21, color: c))));
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+        _b(Icons.edit_outlined, C.forest, const Color(0x266E927F), 'Edit', onEdit),
+        Container(margin: const EdgeInsets.symmetric(horizontal: 12), width: 1, height: 30, color: C.line),
+        _b(Icons.delete_outline, C.rust, const Color(0x1FC4472E), 'Delete', onDelete),
+      ]);
+}
+
+Future<bool> confirmDelete(BuildContext context, String what) async =>
+    await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: const Text('Delete this?'),
+              content: Text('"$what" will be removed. You can undo right after.'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: TextButton.styleFrom(foregroundColor: C.rust),
+                    child: const Text('Delete')),
+              ],
+            )) ??
+    false;
+
+/// Rounded text field used by sign up / login. Password fields get a show/hide eye.
+class AppField extends StatefulWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final bool password;
+  final String? error;
+  final TextInputType? type;
+  final ValueChanged<String>? onChanged, onSubmit;
+  final TextInputAction? action;
+  const AppField(this.controller, this.label, this.icon,
+      {super.key, this.password = false, this.error, this.type, this.onChanged, this.onSubmit, this.action});
+  @override
+  State<AppField> createState() => _AppFieldState();
+}
+
+class _AppFieldState extends State<AppField> {
+  bool hide = true;
+  OutlineInputBorder _b(Color c) => OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: BorderSide(color: c, width: 1.4));
+  @override
+  Widget build(BuildContext context) => TextField(
+        controller: widget.controller,
+        obscureText: widget.password && hide,
+        keyboardType: widget.type,
+        textInputAction: widget.action,
+        onChanged: widget.onChanged,
+        onSubmitted: widget.onSubmit,
+        autocorrect: !widget.password,
+        enableSuggestions: !widget.password,
+        decoration: InputDecoration(
+          labelText: widget.label, errorText: widget.error, filled: true, fillColor: Colors.white,
+          prefixIcon: Icon(widget.icon, color: C.sage),
+          suffixIcon: widget.password
+              ? IconButton(
+                  tooltip: hide ? 'Show password' : 'Hide password',
+                  icon: Icon(hide ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: C.muted),
+                  onPressed: () => setState(() => hide = !hide))
+              : null,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+          border: _b(C.line), enabledBorder: _b(C.line), focusedBorder: _b(C.forest),
+          errorBorder: _b(C.rust), focusedErrorBorder: _b(C.rust),
+        ),
       );
 }

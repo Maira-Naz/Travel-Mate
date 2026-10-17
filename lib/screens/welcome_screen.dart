@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import '../core.dart';
-import 'shell_screen.dart';
+import 'signup_screen.dart';
+import 'login_screen.dart';
 
 // ---------------- 1. WELCOME ----------------
 class Welcome extends StatelessWidget {
   const Welcome({super.key});
-  void _go(BuildContext c) =>
-      Navigator.pushReplacement(c, MaterialPageRoute(builder: (_) => const Shell()));
   @override
   Widget build(BuildContext context) => Scaffold(
         body: Container(
@@ -46,11 +45,11 @@ class Welcome extends StatelessWidget {
                 const SizedBox(height: 28),
                 SizedBox(
                     width: double.infinity,
-                    child: Btn('Get started', () => _go(context), bg: C.cream, fg: C.forest)),
+                    child: Btn('Get started', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SignUpScreen())), bg: C.cream, fg: C.forest)),
                 const SizedBox(height: 8),
                 Center(
                     child: TextButton(
-                        onPressed: () => _go(context),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen())),
                         child: Text('I already have an account',
                             style: body(16, c: const Color(0xFFD5DDD6))))),
               ]),

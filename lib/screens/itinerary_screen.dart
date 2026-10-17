@@ -155,7 +155,8 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                 Expanded(
                     child: Padding(
                   padding: EdgeInsets.only(right: i == dayCount - 1 ? 0 : 6),
-                  child: GestureDetector(
+                  child: Tap(
+                    radius: 24,
                     onTap: () => setState(() => day = i),
                     child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -196,15 +197,19 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                               const SizedBox(height: 6),
                               Box(
                                   onTap: () => _editor(list[i]),
-                                  padding: const EdgeInsets.fromLTRB(18, 12, 4, 12),
+                                  padding: const EdgeInsets.fromLTRB(18, 12, 12, 12),
                                   child: Row(children: [
                                     Expanded(
                                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                       Text(list[i].title, style: body(17, c: C.forest, w: FontWeight.w800)),
                                       if (list[i].sub.isNotEmpty) Text(list[i].sub, style: body(14)),
                                     ])),
-                                    IconButton(icon: const Icon(Icons.edit_outlined, size: 20, color: C.muted), onPressed: () => _editor(list[i])),
-                                    IconButton(icon: const Icon(Icons.delete_outline, size: 22, color: C.rust), onPressed: () => _delete(list[i])),
+                                    const SizedBox(width: 8),
+                                    EditDelete(
+                                        onEdit: () => _editor(list[i]),
+                                        onDelete: () async {
+                                          if (await confirmDelete(context, list[i].title)) _delete(list[i]);
+                                        }),
                                   ])),
                             ]),
                           )),

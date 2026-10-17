@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core.dart';
+import '../services/app_state.dart';
 import 'booking_screen.dart';
 
 // ---------------- DESTINATION DETAIL (About / Hotels / Activities / Foods) ----------------
@@ -12,7 +13,7 @@ class DestinationScreen extends StatefulWidget {
 
 class _DestinationScreenState extends State<DestinationScreen> {
   int tab = 0;
-  bool fav = false;
+  bool get fav => AppState.saved.value.contains(widget.place.name);
   final added = <int>{};
   static const tabs = ['About', 'Hotels', 'Activities', 'Foods'];
 
@@ -138,7 +139,7 @@ class _DestinationScreenState extends State<DestinationScreen> {
                 CircleAvatar(radius: 24, backgroundColor: C.cream,
                     child: IconButton(
                         icon: Icon(fav ? Icons.favorite : Icons.favorite_border, color: C.forest),
-                        onPressed: () => setState(() => fav = !fav))),
+                        onPressed: () => setState(() => AppState.toggleSaved(widget.place.name)))),
               ]),
             ),
           ),
@@ -175,7 +176,8 @@ class _DestinationScreenState extends State<DestinationScreen> {
                   child: Row(children: [
                     for (var i = 0; i < tabs.length; i++)
                       Expanded(
-                          child: GestureDetector(
+                          child: Tap(
+                        radius: 26,
                         onTap: () => setState(() => tab = i),
                         child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),

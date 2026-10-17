@@ -47,7 +47,8 @@ class _VisitedScreenState extends State<VisitedScreen> {
             child: Row(children: [
               for (final v in [true, false])
                 Expanded(
-                    child: GestureDetector(
+                    child: Tap(
+                  radius: 28,
                   onTap: () => setState(() => showVisited = v),
                   child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 18),

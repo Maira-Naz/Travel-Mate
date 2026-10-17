@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import '../core.dart';
-import 'destination_screen.dart';
-import 'itinerary_screen.dart';
+import 'all_destinations_screen.dart';
 import 'weather_screen.dart';
 import 'map_screen.dart';
 import 'budget_screen.dart';
 import 'visited_screen.dart';
 import 'alerts_screen.dart';
+import 'itinerary_screen.dart';
 
-// ---------------- 3. HOME ----------------
+// ---------------- HOME ----------------
 class Home extends StatelessWidget {
   const Home({super.key});
   void _open(BuildContext c, Widget w) => Navigator.push(c, MaterialPageRoute(builder: (_) => w));
@@ -30,7 +30,7 @@ class Home extends StatelessWidget {
             Text('Good evening', style: body(16)),
             Text('Where to next?', style: head(32)),
           ])),
-          const Avatar(radius: 28, fontSize: 22),
+          Tap(radius: 30, onTap: () => TabNav.index.value = 3, child: const Avatar(radius: 28, fontSize: 22)),
         ]),
         const SizedBox(height: 22),
         GridView.count(
@@ -51,31 +51,19 @@ class Home extends StatelessWidget {
         const SizedBox(height: 26),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('Popular destinations', style: head(22)),
-          Text('See all', style: body(16, c: const Color(0xFF356A8A))),
+          Tap(
+              radius: 14,
+              onTap: () => _open(context, const AllDestinationsScreen()),
+              child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Text('See all', style: body(16, c: const Color(0xFF356A8A), w: FontWeight.w700)))),
         ]),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
         SizedBox(
           height: 260,
           child: ListView(scrollDirection: Axis.horizontal, children: [
             for (final p in places)
-              GestureDetector(
-                onTap: () => _open(context, DestinationScreen(p)),
-                child: Container(
-                  width: 250, margin: const EdgeInsets.only(right: 14),
-                  padding: const EdgeInsets.all(20),
-                  alignment: Alignment.bottomLeft,
-                  decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(28),
-                      gradient: LinearGradient(
-                          begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: p.colors)),
-                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(p.name, style: head(26, c: C.cream)),
-                    Text(p.region, style: body(14, c: const Color(0xFFE3E8E0))),
-                    const SizedBox(height: 10),
-                    Text('From ${p.price}', style: body(16, c: C.cream, w: FontWeight.w600)),
-                  ]),
-                ),
-              ),
+              Padding(padding: const EdgeInsets.only(right: 14), child: DestinationCard(p, width: 250)),
           ]),
         ),
       ]),

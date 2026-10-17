@@ -47,7 +47,8 @@ class _MapScreenState extends State<MapScreen> {
           for (var i = 0; i < pts.length; i++)
             Positioned(
               left: pts[i].dx * w - 22, top: pts[i].dy * h - 22,
-              child: GestureDetector(
+              child: Tap(
+                radius: 22,
                 onTap: () => setState(() => sel = i),
                 child: Container(
                   width: 44, height: 44, alignment: Alignment.center,

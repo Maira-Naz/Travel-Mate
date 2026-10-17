@@ -159,16 +159,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
             padding: const EdgeInsets.only(bottom: 10),
             child: Box(
                 onTap: () => _editor(e),
-                padding: const EdgeInsets.fromLTRB(18, 10, 6, 10),
+                padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
                 child: Row(children: [
                   Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(e.name, style: body(16, c: C.forest, w: FontWeight.w800)),
-                    Text(e.cat, style: body(13)),
+                    Text('${e.cat}  ·  PKR ${f(e.amount)}', style: body(14, c: C.forest, w: FontWeight.w700)),
                   ])),
-                  Text('PKR ${f(e.amount)}', style: body(15, c: C.forest, w: FontWeight.w800)),
-                  IconButton(icon: const Icon(Icons.edit_outlined, size: 20, color: C.muted), onPressed: () => _editor(e)),
-                  IconButton(icon: const Icon(Icons.delete_outline, size: 22, color: C.rust), onPressed: () => _delete(e)),
+                  EditDelete(
+                      onEdit: () => _editor(e),
+                      onDelete: () async {
+                        if (await confirmDelete(context, e.name)) _delete(e);
+                      }),
                 ])),
           ),
         const SizedBox(height: 12),

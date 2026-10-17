@@ -86,7 +86,8 @@ class _BookingScreenState extends State<BookingScreen> {
               Expanded(
                   child: Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
+                child: Tap(
+                  radius: 22,
                   onTap: () => setState(() => pay = i),
                   child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 18),
