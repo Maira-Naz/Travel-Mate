@@ -53,7 +53,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 child: photo != null
                     ? null
                     : Text(name.text.trim().isEmpty ? 'Y' : name.text.trim()[0].toUpperCase(),
-                        style: const TextStyle(fontFamily: 'serif', color: C.cream, fontSize: 56, fontWeight: FontWeight.w800)),
+                        style: head(56, c: C.cream)),
               ),
               Positioned(
                   right: 0, bottom: 0,

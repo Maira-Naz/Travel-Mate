@@ -34,18 +34,14 @@ class Bookings extends StatelessWidget {
   const Bookings({super.key});
   @override
   Widget build(BuildContext context) => SafeArea(
-        child: ListView(padding: const EdgeInsets.all(22), children: [
-          Text('Bookings', style: head(30)),
-          const SizedBox(height: 16),
-          const _BookingCards(),
-        ]),
-      );
-}
-
-// Opened from Profile > My bookings
-class MyBookingsScreen extends StatelessWidget {
-  const MyBookingsScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const SubPage('My bookings',
-      child: SingleChildScrollView(padding: EdgeInsets.symmetric(horizontal: 22), child: _BookingCards()));
+    child: ListView(padding: const EdgeInsets.all(22), children: [
+      Row(children: [
+        BackDot(onTap: () => TabNav.index.value = 0),
+        const SizedBox(width: 14),
+        Text('My bookings', style: head(30)),
+      ]),
+      const SizedBox(height: 16),
+      const _BookingCards(),
+    ]),
+  );
 }

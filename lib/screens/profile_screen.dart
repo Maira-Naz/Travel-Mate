@@ -4,7 +4,6 @@ import '../services/app_state.dart';
 import '../services/auth.dart';
 import 'welcome_screen.dart';
 import 'edit_profile_screen.dart';
-import 'bookings_screen.dart';
 import 'saved_places_screen.dart';
 import 'notifications_screen.dart';
 import 'help_screen.dart';
@@ -80,7 +79,7 @@ class Profile extends StatelessWidget {
           Box(
               padding: EdgeInsets.zero,
               child: Column(children: [
-                _row(context, Icons.credit_card, 'My bookings', () => _open(context, const MyBookingsScreen())),
+                _row(context, Icons.credit_card, 'My bookings', () => TabNav.index.value = 2),
                 _row(context, Icons.favorite_border, 'Saved places', () => _open(context, const SavedPlacesScreen())),
                 _row(context, Icons.notifications_none, 'Notifications', () => _open(context, const NotificationsScreen())),
                 ValueListenableBuilder<String>(

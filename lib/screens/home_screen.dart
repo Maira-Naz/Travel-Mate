@@ -22,6 +22,9 @@ class Home extends StatelessWidget {
       ['Visited', Icons.check_circle_outline, C.sage, const VisitedScreen()],
       ['Alerts', Icons.warning_amber_rounded, C.rust, const AlertsScreen()],
     ];
+    // demo trip start date, replace with real trip data later
+    final days = DateTime(2026, 11, 12).difference(DateTime.now()).inDays + 1;
+    final until = days > 0 ? 'in $days days' : 'happening now';
     return SafeArea(
       child: ListView(padding: const EdgeInsets.all(22), children: [
         Row(children: [
@@ -33,6 +36,31 @@ class Home extends StatelessWidget {
           Tap(radius: 30, onTap: () => TabNav.index.value = 3, child: const Avatar(radius: 28, fontSize: 22)),
         ]),
         const SizedBox(height: 22),
+        Tap(
+          radius: 28,
+          onTap: () => TabNav.index.value = 1,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF3F6355), C.forest])),
+            child: Row(children: [
+              Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Your next trip', style: body(14, c: const Color(0xFFD5DDD6))),
+                const SizedBox(height: 4),
+                Text('Hunza Valley', style: head(26, c: C.cream)),
+                const SizedBox(height: 4),
+                Text('12 Nov to 16 Nov  ·  $until', style: body(14, c: C.cream, w: FontWeight.w600)),
+              ])),
+              Container(
+                  width: 48, height: 48,
+                  decoration: const BoxDecoration(color: C.sky, shape: BoxShape.circle),
+                  child: const Icon(Icons.arrow_forward, color: C.forest)),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 18),
         GridView.count(
           crossAxisCount: 3, shrinkWrap: true, crossAxisSpacing: 12, mainAxisSpacing: 12,
           childAspectRatio: 1.15, physics: const NeverScrollableScrollPhysics(),

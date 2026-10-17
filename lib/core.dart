@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'services/storage.dart';
 
 class C {
@@ -8,14 +9,14 @@ class C {
   static const sage = Color(0xFF6E927F);
   static const sky = Color(0xFF7BA7BC);
   static const rust = Color(0xFFC4472E);
-  static const muted = Color(0xFF5E7068);
+  static const muted = Color(0xFF4A5C54);
   static const line = Color(0xFFE8DEC8);
 }
 
 TextStyle head(double s, {Color c = C.forest}) =>
-    TextStyle(fontFamily: 'serif', fontSize: s, fontWeight: FontWeight.w800, color: c);
+    GoogleFonts.fraunces(fontSize: s, fontWeight: FontWeight.w800, color: c);
 TextStyle body(double s, {Color c = C.muted, FontWeight w = FontWeight.w400}) =>
-    TextStyle(fontSize: s, color: c, fontWeight: w);
+    GoogleFonts.dmSans(fontSize: s, color: c, fontWeight: w);
 
 class Box extends StatelessWidget {
   final Widget child;
@@ -70,28 +71,32 @@ class PlaceThumb extends StatelessWidget {
 class Btn extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
-  final Color bg, fg;
+  final Color? bg, fg;
   final bool outlined;
   final IconData? icon;
-  const Btn(this.label, this.onTap, {super.key, this.bg = C.sky, this.fg = C.forest,
-      this.outlined = false, this.icon});
+  const Btn(this.label, this.onTap, {super.key, this.bg, this.fg, this.outlined = false, this.icon});
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: 54,
-        child: outlined
-            ? OutlinedButton(
-                onPressed: onTap,
-                style: OutlinedButton.styleFrom(
-                    foregroundColor: fg, side: BorderSide(color: fg, width: 1.5),
-                    shape: const StadiumBorder()).copyWith(overlayColor: appOverlay),
-                child: Text(label, style: body(16, c: fg, w: FontWeight.w700)))
-            : ElevatedButton.icon(
-                onPressed: onTap,
-                icon: Icon(icon, size: icon == null ? 0 : 20, color: fg),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: bg, elevation: 0, shape: const StadiumBorder()).copyWith(overlayColor: appOverlay),
-                label: Text(label, style: body(16, c: fg, w: FontWeight.w700))),
-      );
+  Widget build(BuildContext context) {
+    // Primary = solid forest green + cream text. Pass bg/fg for secondary styles.
+    final b = bg ?? C.forest;
+    final f = fg ?? (outlined ? C.forest : C.cream);
+    final dark = b == C.forest || b == C.rust;
+    return SizedBox(
+      height: 54,
+      child: outlined
+          ? OutlinedButton(
+              onPressed: onTap,
+              style: OutlinedButton.styleFrom(foregroundColor: f, side: BorderSide(color: f, width: 1.5), shape: const StadiumBorder())
+                  .copyWith(overlayColor: appOverlay),
+              child: Text(label, style: body(16, c: f, w: FontWeight.w700)))
+          : ElevatedButton.icon(
+              onPressed: onTap,
+              icon: Icon(icon, size: icon == null ? 0 : 20, color: f),
+              style: ElevatedButton.styleFrom(backgroundColor: b, elevation: 0, shape: const StadiumBorder())
+                  .copyWith(overlayColor: dark ? lightOverlay : appOverlay),
+              label: Text(label, style: body(16, c: f, w: FontWeight.w700))),
+    );
+  }
 }
 
 class Bar extends StatelessWidget {
@@ -106,10 +111,11 @@ class Bar extends StatelessWidget {
 }
 
 class BackDot extends StatelessWidget {
-  const BackDot({super.key});
+  final VoidCallback? onTap;
+  const BackDot({super.key, this.onTap});
   @override
   Widget build(BuildContext context) => InkWell(
-      onTap: () => Navigator.maybePop(context),
+      onTap: onTap ?? () => Navigator.maybePop(context),
       customBorder: const CircleBorder(),
       child: Container(
           width: 48, height: 48,
@@ -227,7 +233,7 @@ class Avatar extends StatelessWidget {
             child: path != null
                 ? null
                 : Text(n.isEmpty ? 'Y' : n[0].toUpperCase(),
-                    style: TextStyle(fontFamily: 'serif', color: C.cream, fontSize: fontSize, fontWeight: FontWeight.w800)),
+                    style: head(fontSize, c: C.cream)),
           );
         },
       );
@@ -240,6 +246,13 @@ final emailRx = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 final appOverlay = WidgetStateProperty.resolveWith<Color?>((s) {
   if (s.contains(WidgetState.pressed)) return const Color(0x382F4A43);
   if (s.contains(WidgetState.hovered)) return const Color(0x1F2F4A43);
+  return null;
+});
+
+/// Hover/press tint for dark (filled) buttons.
+final lightOverlay = WidgetStateProperty.resolveWith<Color?>((s) {
+  if (s.contains(WidgetState.pressed)) return const Color(0x40FFFFFF);
+  if (s.contains(WidgetState.hovered)) return const Color(0x26FFFFFF);
   return null;
 });
 

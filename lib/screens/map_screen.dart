@@ -113,7 +113,7 @@ class _MapScreenState extends State<MapScreen> {
                 Text(s[1], style: body(15)),
                 const SizedBox(height: 14),
                 Row(children: [
-                  Expanded(child: Btn('Get directions', () {})),
+                  Expanded(child: Btn('Get directions', () {}, bg: C.sky, fg: C.forest)),
                   const SizedBox(width: 10),
                   Expanded(
                       child: Btn(visited(sel) ? 'Visited ✓' : 'Mark visited',

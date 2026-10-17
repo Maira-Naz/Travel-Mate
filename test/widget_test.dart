@@ -3,7 +3,7 @@ import 'package:travel_app/main.dart';
 
 void main() {
   testWidgets('App loads and shows bottom navigation', (WidgetTester tester) async {
-    await tester.pumpWidget(const TravelApp());
+    await tester.pumpWidget(const RoamApp());
 
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Trips'), findsOneWidget);

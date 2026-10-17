@@ -136,14 +136,15 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
     return Scaffold(
       backgroundColor: C.cream,
       floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _editor(), backgroundColor: C.sky, foregroundColor: C.forest,
+          onPressed: () => _editor(), backgroundColor: C.forest, foregroundColor: C.cream,
           icon: const Icon(Icons.add), label: const Text('Add stop', style: TextStyle(fontWeight: FontWeight.w800))),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(22),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              if (!widget.embedded) ...[const BackDot(), const SizedBox(width: 14)],
+              BackDot(onTap: widget.embedded ? () => TabNav.index.value = 0 : null),
+              const SizedBox(width: 14),
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Hunza, 5 days', style: head(26)),
                 Text('12 Nov to 16 Nov', style: body(14)),
