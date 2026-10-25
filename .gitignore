@@ -65,3 +65,4 @@ firebase-debug.log
 *.keystore
 key.properties
 local.properties
+lib/api_keys.dart

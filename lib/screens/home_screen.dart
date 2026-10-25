@@ -8,6 +8,7 @@ import 'alerts_screen.dart';
 import 'all_destinations_screen.dart';
 import 'map_screen.dart';
 import 'trip_detail_screen.dart';
+import 'visited_screen.dart';
 import 'weather_screen.dart';
 
 // ---------------- HOME ----------------
@@ -36,7 +37,7 @@ class Home extends StatelessWidget {
               ));
       return;
     }
-    _open(c, TripDetailScreen(tripId: t.id, tab: tab));
+    _open(c, tab == 2 ? VisitedScreen(tripId: t.id) : TripDetailScreen(tripId: t.id, tab: tab));
   }
 
   Widget _tripCard(BuildContext context) => AnimatedBuilder(
