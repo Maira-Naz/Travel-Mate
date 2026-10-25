@@ -1,12 +1,39 @@
 import 'package:flutter/material.dart';
 import '../core.dart';
+import '../models/models.dart';
 import '../services/app_state.dart';
+import '../services/place_service.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
   @override
   Widget build(BuildContext context) => SubPage('Notifications',
       child: ListView(padding: const EdgeInsets.symmetric(horizontal: 22), children: [
+        ValueListenableBuilder<List<Map<String, dynamic>>>(
+          valueListenable: PlaceService.inbox,
+          builder: (_, items, __) => items.isEmpty
+              ? const SizedBox.shrink()
+              : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('New', style: head(22)),
+                  const SizedBox(height: 10),
+                  for (final n in items)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Box(
+                          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Icon(Icons.notifications_active_outlined, color: C.sky, size: 28),
+                        const SizedBox(width: 14),
+                        Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(n['title'] as String, style: body(16, c: C.forest, w: FontWeight.w800)),
+                          Text(n['body'] as String, style: body(14)),
+                          Text('${fmtDate(DateTime.parse(n['at'] as String))}, ${fmtClock(DateTime.parse(n['at'] as String))}', style: body(12)),
+                        ])),
+                      ])),
+                    ),
+                  const SizedBox(height: 14),
+                ]),
+        ),
         Text('Recent', style: head(22)),
         const SizedBox(height: 10),
         for (final n in [

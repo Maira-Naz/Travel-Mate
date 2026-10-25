@@ -16,13 +16,35 @@ class _LoginScreenState extends State<LoginScreen> {
   bool busy = false;
 
   Future<void> _login() async {
-    if (id.text.trim().isEmpty || pw.text.isEmpty) return setState(() => error = 'Enter your email or username and password');
+    if (!emailRx.hasMatch(id.text.trim()) || pw.text.isEmpty) return setState(() => error = 'Enter your email and password');
     setState(() { busy = true; error = null; });
     final r = await Auth.login(id.text, pw.text);
     if (!mounted) return;
     setState(() => busy = false);
     if (r != null) return setState(() => error = r);
     Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const Shell()), (_) => false);
+  }
+
+  Future<void> _forgot() async {
+    final c = TextEditingController(text: id.text.trim());
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: const Text('Reset password'),
+              content: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text('Enter your email and we will send you a reset link.'),
+                TextField(controller: c, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
+              ]),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send link')),
+              ],
+            ));
+    if (ok != true) return;
+    if (!emailRx.hasMatch(c.text.trim())) return setState(() => error = 'Enter a valid email to reset your password');
+    final r = await Auth.resetPassword(c.text);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r ?? 'If an account exists for that email, a reset link has been sent.')));
   }
 
   @override
@@ -42,20 +64,10 @@ class _LoginScreenState extends State<LoginScreen> {
               Expanded(child: Text(error!, style: body(14, c: const Color(0xFF6E1F12), w: FontWeight.w600))),
             ]),
           ),
-        AppField(id, 'Email or username', Icons.person_outline, type: TextInputType.emailAddress, action: TextInputAction.next, onChanged: (_) => setState(() => error = null)),
+        AppField(id, 'Email', Icons.mail_outline, type: TextInputType.emailAddress, action: TextInputAction.next, onChanged: (_) => setState(() => error = null)),
         const SizedBox(height: 14),
         AppField(pw, 'Password', Icons.lock_outline, password: true, onSubmit: (_) => _login(), onChanged: (_) => setState(() => error = null)),
-        Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-                onPressed: () => showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                          title: const Text('Forgot password?'),
-                          content: const Text('Password reset by email needs an online account. It will be added when we connect the backend.'),
-                          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-                        )),
-                child: const Text('Forgot password?'))),
+        Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _forgot, child: const Text('Forgot password?'))),
         const SizedBox(height: 6),
         Center(
             child: TextButton(

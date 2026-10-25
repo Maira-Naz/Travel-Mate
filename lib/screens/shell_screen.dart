@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import '../core.dart';
 import 'home_screen.dart';
-import 'itinerary_screen.dart';
+import 'trips_screen.dart';
 import 'bookings_screen.dart';
 import 'profile_screen.dart';
 
 // ---------------- SHELL (bottom nav) ----------------
 class Shell extends StatelessWidget {
   const Shell({super.key});
-  static const tabs = [Home(), ItineraryScreen(embedded: true), Bookings(), Profile()];
+  static const tabs = [Home(), TripsScreen(), Bookings(), Profile()];
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<int>(
         valueListenable: TabNav.index,

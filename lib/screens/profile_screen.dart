@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core.dart';
 import '../services/app_state.dart';
 import '../services/auth.dart';
+import '../services/trip_store.dart';
 import 'welcome_screen.dart';
 import 'edit_profile_screen.dart';
 import 'saved_places_screen.dart';
@@ -10,6 +11,46 @@ import 'help_screen.dart';
 import 'language_screen.dart';
 
 // ---------------- PROFILE ----------------
+class _VerifyBanner extends StatefulWidget {
+  const _VerifyBanner();
+  @override
+  State<_VerifyBanner> createState() => _VerifyBannerState();
+}
+
+class _VerifyBannerState extends State<_VerifyBanner> {
+  @override
+  Widget build(BuildContext context) {
+    if (Auth.emailVerified) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Box(
+          color: const Color(0xFFF3E8BF),
+          border: const Color(0xFFD9C47A),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.mark_email_unread_outlined, color: Color(0xFF6B5410)),
+              const SizedBox(width: 10),
+              Expanded(child: Text('Please verify your email. We sent you a link.', style: body(14, c: const Color(0xFF6B5410), w: FontWeight.w700))),
+            ]),
+            Row(children: [
+              TextButton(
+                  onPressed: () async {
+                    final r = await Auth.resendVerification();
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r ?? 'Verification email sent')));
+                  },
+                  child: const Text('Resend email')),
+              TextButton(
+                  onPressed: () async {
+                    await Auth.refreshUser();
+                    if (mounted) setState(() {});
+                  },
+                  child: const Text("I've verified")),
+            ]),
+          ])),
+    );
+  }
+}
+
 class Profile extends StatelessWidget {
   const Profile({super.key});
   void _open(BuildContext c, Widget w) => Navigator.push(c, MaterialPageRoute(builder: (_) => w));
@@ -31,6 +72,32 @@ class Profile extends StatelessWidget {
     if (context.mounted) {
       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const Welcome()), (_) => false);
     }
+  }
+
+  Future<void> _delete(BuildContext context) async {
+    final pw = TextEditingController();
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: const Text('Delete your account?'),
+              content: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text('This permanently deletes your account and all your trips, expenses and saved places. This cannot be undone.'),
+                const SizedBox(height: 12),
+                TextField(controller: pw, obscureText: true, decoration: const InputDecoration(labelText: 'Enter your password to confirm')),
+              ]),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: C.rust), child: const Text('Delete forever')),
+              ],
+            ));
+    if (ok != true) return;
+    final r = await Auth.deleteAccount(pw.text);
+    if (!context.mounted) return;
+    if (r != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r)));
+      return;
+    }
+    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const Welcome()), (_) => false);
   }
 
   Widget _row(BuildContext c, IconData icon, String title, VoidCallback onTap, {Widget? trailing, bool last = false}) => Column(children: [
@@ -65,15 +132,16 @@ class Profile extends StatelessWidget {
                   label: const Text('Edit profile'),
                   style: OutlinedButton.styleFrom(foregroundColor: C.forest, side: const BorderSide(color: C.forest, width: 1.4), shape: const StadiumBorder()).copyWith(overlayColor: appOverlay))),
           const SizedBox(height: 22),
+          const _VerifyBanner(),
           Row(children: [
-            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Box(onTap: () => TabNav.index.value = 1, child: SizedBox(width: double.infinity, child: Column(children: [Text('3', style: head(28)), Text('Trips', style: body(13))]))))),
+            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Box(onTap: () => TabNav.index.value = 1, child: SizedBox(width: double.infinity, child: Column(children: [AnimatedBuilder(animation: TripStore.i, builder: (_, __) => Text('${TripStore.i.trips.length}', style: head(28))), Text('Trips', style: body(13))]))))),
             Expanded(
                 child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: ValueListenableBuilder<List<String>>(
                         valueListenable: AppState.saved,
                         builder: (_, s, __) => Box(onTap: () => _open(context, const SavedPlacesScreen()), child: SizedBox(width: double.infinity, child: Column(children: [Text('${s.length}', style: head(28)), Text('Saved places', style: body(13))])))))),
-            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Box(onTap: () => TabNav.index.value = 2, child: SizedBox(width: double.infinity, child: Column(children: [Text('2', style: head(28)), Text('Bookings', style: body(13))]))))),
+            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Box(onTap: () => TabNav.index.value = 2, child: SizedBox(width: double.infinity, child: Column(children: [AnimatedBuilder(animation: TripStore.i, builder: (_, __) => Text('${TripStore.i.bookings.length}', style: head(28))), Text('Bookings', style: body(13))]))))),
           ]),
           const SizedBox(height: 18),
           Box(
@@ -90,6 +158,8 @@ class Profile extends StatelessWidget {
               ])),
           const SizedBox(height: 18),
           Btn('Log out', () => _logout(context), fg: const Color(0xFF356A8A), outlined: true),
+          const SizedBox(height: 6),
+          Center(child: TextButton(onPressed: () => _delete(context), style: TextButton.styleFrom(foregroundColor: C.rust), child: const Text('Delete account'))),
           const SizedBox(height: 10),
         ]),
       );

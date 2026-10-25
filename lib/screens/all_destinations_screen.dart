@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core.dart';
-import '../services/app_state.dart';
+import '../services/place_service.dart';
 import 'destination_screen.dart';
 
 /// Gradient destination card (used on Home and in See all).
@@ -30,6 +30,7 @@ class DestinationCard extends StatelessWidget {
       );
 }
 
+/// Search all places. Unknown place? We save a request and tell the user we will find it.
 class AllDestinationsScreen extends StatefulWidget {
   const AllDestinationsScreen({super.key});
   @override
@@ -38,27 +39,71 @@ class AllDestinationsScreen extends StatefulWidget {
 
 class _AllDestinationsScreenState extends State<AllDestinationsScreen> {
   String q = '';
+
   @override
-  Widget build(BuildContext context) {
-    final list = places.where((p) => '${p.name} ${p.region}'.toLowerCase().contains(q.toLowerCase())).toList();
-    return SubPage('All destinations',
-        sub: '${places.length} places to explore',
-        child: ListView(padding: const EdgeInsets.symmetric(horizontal: 22), children: [
-          TextField(
-            onChanged: (v) => setState(() => q = v),
-            decoration: InputDecoration(
-              hintText: 'Search destinations', prefixIcon: const Icon(Icons.search, color: C.sage),
-              filled: true, fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(vertical: 16),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: const BorderSide(color: C.line)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: const BorderSide(color: C.line)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: const BorderSide(color: C.forest, width: 1.4)),
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (list.isEmpty) Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('No places match "$q"', style: body(16)))),
-          for (final p in list)
-            Padding(padding: const EdgeInsets.only(bottom: 14), child: DestinationCard(p, height: 170)),
-        ]));
+  void initState() {
+    super.initState();
+    PlaceService.refreshRemote(); // pick up places added to the cloud database
   }
+
+  Widget _notFound() => ValueListenableBuilder<List<Map<String, dynamic>>>(
+        valueListenable: PlaceService.requests,
+        builder: (_, __, ___) {
+          final asked = PlaceService.isRequested(q);
+          return Box(
+              padding: const EdgeInsets.all(20),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Icon(asked ? Icons.mark_email_read_outlined : Icons.travel_explore, color: C.sage, size: 30),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(asked ? 'Request sent' : 'No details for "${q.trim()}" yet', style: head(20))),
+                ]),
+                const SizedBox(height: 8),
+                Text(
+                    asked
+                        ? "We're finding the details for this place. We'll notify you in Notifications as soon as they are ready."
+                        : "We'll find the details for this place and notify you when they are ready. Want us to look for it?",
+                    style: body(15)),
+                if (!asked) ...[
+                  const SizedBox(height: 14),
+                  SizedBox(
+                      width: double.infinity,
+                      child: Btn('Request details', () async {
+                        await PlaceService.request(q);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Request sent. We'll notify you when it's ready.")));
+                        }
+                      }, icon: Icons.send_outlined)),
+                ],
+              ]));
+        },
+      );
+
+  @override
+  Widget build(BuildContext context) => SubPage('All destinations',
+      sub: 'Search any place in Pakistan',
+      child: ValueListenableBuilder<List<Place>>(
+        valueListenable: PlaceService.remote,
+        builder: (_, __, ___) {
+          final list = PlaceService.all.where((p) => '${p.name} ${p.region}'.toLowerCase().contains(q.trim().toLowerCase())).toList();
+          return ListView(padding: const EdgeInsets.symmetric(horizontal: 22), children: [
+            TextField(
+              onChanged: (v) => setState(() => q = v),
+              decoration: InputDecoration(
+                hintText: 'Search destinations', prefixIcon: const Icon(Icons.search, color: C.sage),
+                filled: true, fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: const BorderSide(color: C.line)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: const BorderSide(color: C.line)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: const BorderSide(color: C.forest, width: 1.4)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (list.isEmpty && q.trim().length >= 2) _notFound(),
+            if (list.isEmpty && q.trim().length < 2) Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Type at least 2 letters', style: body(15)))),
+            for (final p in list) Padding(padding: const EdgeInsets.only(bottom: 14), child: DestinationCard(p, height: 170)),
+            const SizedBox(height: 16),
+          ]);
+        },
+      ));
 }

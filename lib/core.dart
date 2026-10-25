@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'models/models.dart';
 import 'services/storage.dart';
 
 class C {
@@ -160,6 +161,18 @@ class Place {
   final double rating;
   final List<Color> colors;
   const Place(this.name, this.region, this.price, this.rating, this.colors, this.about);
+
+  /// Build a place from a Firestore `destinations` document.
+  factory Place.fromMap(Map<String, dynamic> m) {
+    final p = m['price'];
+    return Place(
+        m['name']?.toString() ?? 'Unknown place',
+        m['region']?.toString() ?? '',
+        p is num ? money(p.toInt()) : (p?.toString() ?? 'Price on request'),
+        m['rating'] is num ? (m['rating'] as num).toDouble() : 4.5,
+        const [Color(0xFFCFE3DC), Color(0xFF2F4A43)],
+        m['about']?.toString() ?? '');
+  }
 }
 
 const places = [
@@ -201,19 +214,34 @@ const thumbs = [
 
 // ---------------- USER PROFILE (shared, editable) ----------------
 class UserStore {
-  static final name = ValueNotifier<String>('Your Name');
-  static final email = ValueNotifier<String>('you@email.com');
-  static final photo = ValueNotifier<String?>(null); // local file path
+  static final name = ValueNotifier<String>('');
+  static final email = ValueNotifier<String>('');
+  static final photo = ValueNotifier<String?>(null); // device-only file path
+  static String? _uid;
+  static bool _hooked = false;
 
-  /// Load saved values and auto-save on every change.
-  static void init() {
-    name.value = Store.getString('user_name') ?? name.value;
-    email.value = Store.getString('user_email') ?? email.value;
-    final p = Store.getString('user_photo');
+  /// Fill from the signed-in Firebase user.
+  static void load({required String uid, String? displayName, String? email}) {
+    _uid = uid;
+    final mail = email ?? '';
+    name.value = (displayName != null && displayName.trim().isNotEmpty) ? displayName.trim() : mail.split('@').first;
+    UserStore.email.value = mail;
+    final p = Store.localGet('photo_$uid');
     photo.value = (p != null && File(p).existsSync()) ? p : null;
-    name.addListener(() => Store.setString('user_name', name.value));
-    email.addListener(() => Store.setString('user_email', email.value));
-    photo.addListener(() => Store.setString('user_photo', photo.value));
+    if (!_hooked) {
+      _hooked = true;
+      photo.addListener(() {
+        final id = _uid;
+        if (id != null) Store.localSet('photo_$id', photo.value);
+      });
+    }
+  }
+
+  static void reset() {
+    _uid = null;
+    name.value = '';
+    email.value = '';
+    photo.value = null;
   }
 }
 
@@ -341,11 +369,13 @@ class AppField extends StatefulWidget {
   final IconData icon;
   final bool password;
   final String? error;
+  final bool enabled;
+  final int maxLines;
   final TextInputType? type;
   final ValueChanged<String>? onChanged, onSubmit;
   final TextInputAction? action;
   const AppField(this.controller, this.label, this.icon,
-      {super.key, this.password = false, this.error, this.type, this.onChanged, this.onSubmit, this.action});
+      {super.key, this.password = false, this.error, this.enabled = true, this.maxLines = 1, this.type, this.onChanged, this.onSubmit, this.action});
   @override
   State<AppField> createState() => _AppFieldState();
 }
@@ -356,6 +386,8 @@ class _AppFieldState extends State<AppField> {
   @override
   Widget build(BuildContext context) => TextField(
         controller: widget.controller,
+        enabled: widget.enabled,
+        maxLines: widget.password ? 1 : widget.maxLines,
         obscureText: widget.password && hide,
         keyboardType: widget.type,
         textInputAction: widget.action,
@@ -377,4 +409,82 @@ class _AppFieldState extends State<AppField> {
           errorBorder: _b(C.rust), focusedErrorBorder: _b(C.rust),
         ),
       );
+}
+
+// ---------------- shared form / list widgets ----------------
+Future<DateTime?> pickDate(BuildContext c, DateTime initial, {DateTime? first}) =>
+    showDatePicker(context: c, initialDate: initial, firstDate: first ?? DateTime(2020), lastDate: DateTime(2100));
+
+class DateTile extends StatelessWidget {
+  final String label, empty;
+  final DateTime? value;
+  final VoidCallback onTap;
+  const DateTile(this.label, this.value, this.onTap, {super.key, this.empty = 'Choose a date'});
+  @override
+  Widget build(BuildContext context) => Box(
+      onTap: onTap, radius: 22, padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      child: Row(children: [
+        const Icon(Icons.calendar_month_outlined, color: C.sage),
+        const SizedBox(width: 12),
+        Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: body(12)),
+          Text(value == null ? empty : '${fmtWeekday(value!)}, ${fmtDate(value!, year: true)}',
+              style: body(15, c: value == null ? C.muted : C.forest, w: FontWeight.w700)),
+        ])),
+      ]));
+}
+
+class ChipRow extends StatelessWidget {
+  final List<String> options;
+  final String selected;
+  final ValueChanged<String> onSelect;
+  const ChipRow(this.options, this.selected, this.onSelect, {super.key});
+  @override
+  Widget build(BuildContext context) => Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final o in options)
+          ChoiceChip(
+            label: Text(o),
+            selected: o == selected,
+            onSelected: (_) => onSelect(o),
+            selectedColor: C.forest,
+            backgroundColor: Colors.white,
+            labelStyle: TextStyle(color: o == selected ? C.cream : C.forest, fontWeight: FontWeight.w700),
+            shape: const StadiumBorder(side: BorderSide(color: C.line)),
+            showCheckmark: false,
+          ),
+      ]);
+}
+
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title, text;
+  final Widget? action;
+  const EmptyState(this.icon, this.title, this.text, {super.key, this.action});
+  @override
+  Widget build(BuildContext context) => Center(
+      child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 54, color: C.sage),
+            const SizedBox(height: 12),
+            Text(title, style: head(22), textAlign: TextAlign.center),
+            const SizedBox(height: 6),
+            Text(text, style: body(15), textAlign: TextAlign.center),
+            if (action != null) ...[const SizedBox(height: 18), action!],
+          ])));
+}
+
+Tag statusTag(String s) {
+  switch (s) {
+    case 'Upcoming':
+      return const Tag('Upcoming', Color(0xFFD7E6EE), Color(0xFF356A8A));
+    case 'Ongoing':
+    case 'Confirmed':
+      return Tag(s, const Color(0xFFD9EBDD), const Color(0xFF2A6B3C));
+    case 'Pay later':
+      return const Tag('Pay later', Color(0xFFF3E8BF), Color(0xFF6B5410));
+    default:
+      return Tag(s, const Color(0xFFE6E2D6), C.muted);
+  }
 }

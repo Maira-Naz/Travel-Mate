@@ -1,25 +1,22 @@
-import 'dart:convert';
-import 'dart:math';
-import 'dart:typed_data';
-import 'package:crypto/crypto.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../core.dart';
+import 'app_state.dart';
+import 'place_service.dart';
+import 'trip_store.dart';
 import 'storage.dart';
 
-/// Local (on-device) account + login session.
-/// Passwords are never stored: only a random salt + PBKDF2-HMAC-SHA256 hash.
-/// Later this can be swapped for a real backend (Firebase Auth, etc.).
+/// Firebase Authentication (email + password). Firebase stores the password
+/// securely (salted hash) and keeps the user logged in between app launches.
 class Auth {
-  static const _iter = 10000;
+  static final _auth = FirebaseAuth.instance;
+  static User? get user => _auth.currentUser;
+  static bool get loggedIn => _auth.currentUser != null;
+  static bool get emailVerified => _auth.currentUser?.emailVerified ?? false;
+
+  // ---------- password rules (checked before Firebase is called) ----------
   static const _common = {'password', 'password1', '12345678', 'qwerty123', 'abc12345', 'iloveyou1', '123456789', 'welcome1'};
 
-  static Map<String, dynamic>? get account {
-    final j = Store.getJson('account');
-    return j == null ? null : Map<String, dynamic>.from(j);
-  }
-
-  static bool get loggedIn => Store.getString('logged_in') == '1' && account != null;
-
-  // ---------- password rules ----------
   static String? validatePassword(String p, {String name = '', String email = ''}) {
     if (p.length < 8) return 'Use at least 8 characters';
     if (!RegExp(r'[A-Za-z]').hasMatch(p) || !RegExp(r'\d').hasMatch(p)) return 'Include at least one letter and one number';
@@ -40,80 +37,150 @@ class Auth {
     return s.clamp(1, 4);
   }
 
-  // ---------- hashing ----------
-  static Uint8List _pbkdf2(String pw, List<int> salt, int iter) {
-    final h = Hmac(sha256, utf8.encode(pw));
-    var u = h.convert([...salt, 0, 0, 0, 1]).bytes;
-    final t = List<int>.from(u);
-    for (var i = 1; i < iter; i++) {
-      u = h.convert(u).bytes;
-      for (var j = 0; j < t.length; j++) {
-        t[j] ^= u[j];
-      }
+  static String _msg(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-credential':
+      case 'wrong-password':
+      case 'user-not-found':
+      case 'invalid-login-credentials':
+        return 'Incorrect email or password.';
+      case 'email-already-in-use':
+        return 'An account with this email already exists. Try logging in.';
+      case 'invalid-email':
+        return 'That email address is not valid.';
+      case 'weak-password':
+        return 'That password is too weak. Use a stronger one.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait a few minutes and try again.';
+      case 'network-request-failed':
+        return 'No internet connection. Check your network and try again.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'requires-recent-login':
+        return 'Please log in again and retry.';
+      default:
+        return 'Something went wrong (${e.code}).';
     }
-    return Uint8List.fromList(t);
   }
 
-  static bool _same(List<int> a, List<int> b) {
-    if (a.length != b.length) return false;
-    var d = 0;
-    for (var i = 0; i < a.length; i++) {
-      d |= a[i] ^ b[i];
-    }
-    return d == 0;
+  // ---------- session ----------
+  static Future<void> startSession(User u) async {
+    await Store.loadUser(u.uid);
+    UserStore.load(uid: u.uid, displayName: Store.getString('profile_name') ?? u.displayName, email: u.email);
+    AppState.load();
+    TripStore.i.load();
+    PlaceService.load();
   }
 
-  // ---------- actions ----------
+  static void _endSession() {
+    TripStore.i.reset();
+    PlaceService.reset();
+    AppState.reset();
+    Store.clear();
+    UserStore.reset();
+    TabNav.index.value = 0;
+  }
+
+  // ---------- actions (return null on success, or an error message) ----------
   static Future<String?> signUp(String name, String email, String pw, String? photo) async {
-    await Future.delayed(const Duration(milliseconds: 50));
-    final rnd = Random.secure();
-    final salt = List<int>.generate(16, (_) => rnd.nextInt(256));
-    await Store.setJson('account', {
-      'name': name, 'email': email, 'iter': _iter,
-      'salt': base64Encode(salt), 'hash': base64Encode(_pbkdf2(pw, salt, _iter)),
-    });
-    UserStore.name.value = name;
-    UserStore.email.value = email;
-    UserStore.photo.value = photo;
-    await Store.setString('fails', '0');
-    await Store.setString('logged_in', '1');
-    return null;
-  }
-
-  static Future<String?> login(String id, String pw) async {
-    await Future.delayed(const Duration(milliseconds: 50));
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final lock = int.tryParse(Store.getString('lock_until') ?? '') ?? 0;
-    if (lock > now) return 'Too many attempts. Try again in ${((lock - now) / 1000).ceil()} seconds.';
-    final a = account;
-    if (a == null) return 'No account found on this device. Please sign up first.';
-    final i = id.trim().toLowerCase();
-    final idOk = i == (a['email'] as String).toLowerCase() || i == (a['name'] as String).toLowerCase();
-    final h = _pbkdf2(pw, base64Decode(a['salt']), a['iter'] as int); // always hash (same timing)
-    if (!idOk || !_same(h, base64Decode(a['hash']))) {
-      final fails = (int.tryParse(Store.getString('fails') ?? '') ?? 0) + 1;
-      if (fails >= 5) {
-        await Store.setString('fails', '0');
-        await Store.setString('lock_until', '${now + 30000}');
-        return 'Too many attempts. Try again in 30 seconds.';
-      }
-      await Store.setString('fails', '$fails');
-      return 'Incorrect email/username or password.';
+    try {
+      final cred = await _auth.createUserWithEmailAndPassword(email: email.trim(), password: pw);
+      final u = cred.user!;
+      await u.updateDisplayName(name);
+      if (photo != null) await Store.localSet('photo_${u.uid}', photo);
+      FirebaseFirestore.instance
+          .collection('users').doc(u.uid)
+          .set({'name': name, 'email': email.trim(), 'createdAt': FieldValue.serverTimestamp()})
+          .catchError((_) {});
+      u.sendEmailVerification().catchError((_) {});
+      await u.reload();
+      await startSession(_auth.currentUser!);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _msg(e);
+    } catch (_) {
+      return 'Something went wrong. Please try again.';
     }
-    await Store.setString('fails', '0');
-    UserStore.name.value = a['name'];
-    UserStore.email.value = a['email'];
-    await Store.setString('logged_in', '1');
-    return null;
   }
 
-  static Future<void> logout() async => Store.setString('logged_in', null);
+  static Future<String?> login(String email, String pw) async {
+    try {
+      final c = await _auth.signInWithEmailAndPassword(email: email.trim(), password: pw);
+      await startSession(c.user!);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _msg(e);
+    } catch (_) {
+      return 'Something went wrong. Please try again.';
+    }
+  }
 
-  static Future<void> updateProfile(String name, String email) async {
-    final a = account;
-    if (a == null) return;
-    a['name'] = name;
-    a['email'] = email;
-    await Store.setJson('account', a);
+  static Future<void> logout() async {
+    await _auth.signOut();
+    _endSession();
+  }
+
+  static Future<String?> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      return null;
+    } on FirebaseAuthException catch (e) {
+      // do not reveal whether an account exists
+      if (e.code == 'user-not-found') return null;
+      return _msg(e);
+    } catch (_) {
+      return 'Something went wrong. Please try again.';
+    }
+  }
+
+  static Future<String?> resendVerification() async {
+    try {
+      await _auth.currentUser?.sendEmailVerification();
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _msg(e);
+    }
+  }
+
+  static Future<void> refreshUser() async {
+    try {
+      await _auth.currentUser?.reload();
+    } catch (_) {}
+  }
+
+  /// Works offline: the cloud copy is queued and sent when the phone is online again.
+  static Future<void> updateName(String name) async {
+    final u = _auth.currentUser;
+    if (u == null) return;
+    FirebaseFirestore.instance.collection('users').doc(u.uid).set({'name': name}, SetOptions(merge: true)).catchError((_) {});
+    try {
+      await u.updateDisplayName(name).timeout(const Duration(seconds: 4));
+    } catch (_) {}
+  }
+
+  /// Permanently deletes the account and all its cloud data (needs the password again).
+  static Future<String?> deleteAccount(String pw) async {
+    final u = _auth.currentUser;
+    if (u == null || u.email == null) return 'Not signed in.';
+    try {
+      await u.reauthenticateWithCredential(EmailAuthProvider.credential(email: u.email!, password: pw));
+      final db = FirebaseFirestore.instance;
+      final ref = db.collection('users').doc(u.uid);
+      final data = await ref.collection('data').get();
+      final batch = db.batch();
+      for (final d in data.docs) {
+        batch.delete(d.reference);
+      }
+      batch.delete(ref);
+      await batch.commit();
+      await Store.localSet('photo_${u.uid}', null);
+      await u.delete();
+      _endSession();
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _msg(e);
+    } catch (_) {
+      return 'Could not delete the account. Please try again.';
+    }
   }
 }

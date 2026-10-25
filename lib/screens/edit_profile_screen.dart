@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core.dart';
 import '../services/auth.dart';
 import '../services/media.dart';
+import '../services/storage.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -22,16 +23,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _save() async {
-    final n = name.text.trim(), e = email.text.trim();
+    final n = name.text.trim();
     final errs = <String, String>{};
     if (n.length < 2) errs['name'] = 'Please enter your name';
-    if (!emailRx.hasMatch(e)) errs['email'] = 'Enter a valid email address';
     setState(() => err = errs);
     if (errs.isNotEmpty) return;
     UserStore.name.value = n;
-    UserStore.email.value = e;
     UserStore.photo.value = photo;
-    await Auth.updateProfile(n, e);
+    Store.setString('profile_name', n); // saved on the phone at once, synced when online
+    await Auth.updateName(n);
     if (!mounted) return;
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated')));
@@ -75,6 +75,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         const SizedBox(height: 14),
         AppField(name, 'Full name', Icons.badge_outlined, error: err['name'], action: TextInputAction.next, onChanged: (_) => setState(() => err.remove('name'))),
         const SizedBox(height: 14),
-        AppField(email, 'Email', Icons.mail_outline, type: TextInputType.emailAddress, error: err['email'], onChanged: (_) => setState(() => err.remove('email'))),
+        AppField(email, 'Email (login, cannot be changed here)', Icons.mail_outline, enabled: false),
       ]));
 }
