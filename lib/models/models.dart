@@ -84,10 +84,12 @@ class TripPlace {
   String id, tripId, name;
   bool visited;
   String? visitedOn; // ISO date
-  TripPlace({required this.id, required this.tripId, required this.name, this.visited = false, this.visitedOn});
-  Map<String, dynamic> toJson() => {'id': id, 'tid': tripId, 'n': name, 'v': visited, 'on': visitedOn};
+  double? lat, lon; // set when the place was added from the map
+  TripPlace({required this.id, required this.tripId, required this.name, this.visited = false, this.visitedOn, this.lat, this.lon});
+  Map<String, dynamic> toJson() => {'id': id, 'tid': tripId, 'n': name, 'v': visited, 'on': visitedOn, 'lat': lat, 'lon': lon};
   factory TripPlace.fromJson(Map<String, dynamic> j) => TripPlace(
-      id: j['id'], tripId: j['tid'], name: j['n'], visited: j['v'] ?? false, visitedOn: j['on']);
+      id: j['id'], tripId: j['tid'], name: j['n'], visited: j['v'] ?? false, visitedOn: j['on'],
+      lat: (j['lat'] as num?)?.toDouble(), lon: (j['lon'] as num?)?.toDouble());
 }
 
 /// A booking. source 'app' = made in Roam (opens trip details), 'external' = added by the user (tracking only).

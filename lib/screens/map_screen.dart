@@ -1,8 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../core.dart';
-import '../services/storage.dart';
+import '../models/models.dart';
+import '../services/map_service.dart';
+import '../services/trip_store.dart';
 
-// ---------------- MAP (placeholder painter; swap for google_maps_flutter later) ----------------
+class _Sel {
+  final String name, sub;
+  final double lat, lon;
+  final TripPlace? place; // set when it is one of the trip's saved places
+  _Sel(this.name, this.sub, this.lat, this.lon, {this.place});
+}
+
+// ---------------- MAP (OpenStreetMap + flutter_map) ----------------
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
   @override
@@ -10,145 +21,293 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  int sel = 0, filter = 0;
-  static const pts = [Offset(.51, .26), Offset(.31, .36), Offset(.36, .56), Offset(.67, .59), Offset(.88, .44)];
-  static const stops = [
-    ['Baltit Fort', 'Karimabad, 6 km from you', '15 min drive'],
-    ['Karimabad Bazaar', 'Karimabad, 5 km from you', '12 min drive'],
-    ['Riverside Lodge', 'Near Attabad Lake, 9 km', '20 min drive'],
-    ['Attabad Lake', 'Gojal, 22 km from you', '35 min drive'],
-    ["Eagle's Nest", 'Duikar, 14 km from you', '30 min drive'],
-  ];
-  bool visited(int i) => _visited.contains(i);
-  final _visited = <int>{};
+  static const pakistan = LatLng(30.3753, 69.3451);
+  final controller = MapController();
+  final search = TextEditingController();
+  List<GeoPlace> results = [];
+  bool searching = false;
+  String? msg;
+  _Sel? sel;
 
   @override
   void initState() {
     super.initState();
-    final saved = Store.getJson('map_visited');
-    if (saved != null) _visited.addAll(List<int>.from(saved));
+    _centerOnTrip();
   }
 
   @override
-  void setState(VoidCallback fn) {
-    super.setState(fn);
-    Store.setJson('map_visited', _visited.toList());
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _snack(String t) => ScaffoldMessenger.of(context)
+    ..clearSnackBars()
+    ..showSnackBar(SnackBar(content: Text(t)));
+
+  /// Start on the current trip's destination (found with the free search service).
+  Future<void> _centerOnTrip() async {
+    final t = TripStore.i.active;
+    if (t == null) return;
+    await Future.delayed(const Duration(milliseconds: 400)); // let the map appear first
+    try {
+      final r = await MapService.search(t.destination);
+      if (r.isNotEmpty && mounted) controller.move(LatLng(r.first.lat, r.first.lon), 10);
+    } catch (_) {}
+  }
+
+  Future<void> _search() async {
+    final q = search.text.trim();
+    if (q.length < 2 || searching) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      searching = true;
+      msg = null;
+      results = [];
+    });
+    try {
+      final r = await MapService.search(q);
+      if (!mounted) return;
+      setState(() {
+        results = r;
+        msg = r.isEmpty ? 'No places found for "$q". Try another spelling.' : null;
+      });
+    } catch (_) {
+      if (mounted) setState(() => msg = 'Could not search. Check your internet connection.');
+    }
+    if (mounted) setState(() => searching = false);
+  }
+
+  void _pick(GeoPlace g) {
+    setState(() {
+      results = [];
+      sel = _Sel(g.name, g.subtitle, g.lat, g.lon);
+    });
+    controller.move(LatLng(g.lat, g.lon), 13);
+  }
+
+  /// Long-press on the map: drop a pin and find out what is there.
+  Future<void> _longPress(LatLng p) async {
+    final coords = '${p.latitude.toStringAsFixed(4)}, ${p.longitude.toStringAsFixed(4)}';
+    setState(() {
+      results = [];
+      sel = _Sel('Dropped pin', 'Looking up the name...', p.latitude, p.longitude);
+    });
+    GeoPlace? g;
+    try {
+      g = await MapService.reverse(p.latitude, p.longitude);
+    } catch (_) {}
+    if (!mounted || sel?.lat != p.latitude) return;
+    setState(() => sel = g == null ? _Sel('Dropped pin', coords, p.latitude, p.longitude) : _Sel(g.name, g.subtitle, p.latitude, p.longitude));
+  }
+
+  void _addToTrip(_Sel s) {
+    final t = TripStore.i.active;
+    if (t == null) return _snack('Add a trip first, then you can save places to it.');
+    if (TripStore.i.placesFor(t.id).any((p) => p.name.toLowerCase() == s.name.toLowerCase())) {
+      return _snack('"${s.name}" is already in ${t.name}.');
+    }
+    TripStore.i.addPlace(TripPlace(id: newId(), tripId: t.id, name: s.name, lat: s.lat, lon: s.lon));
+    setState(() => sel = null);
+    _snack('Added to ${t.name}. Find it under Visited.');
+  }
+
+  void _zoom(double by) {
+    final c = controller.camera;
+    controller.move(c.center, (c.zoom + by).clamp(3.0, 18.0).toDouble());
+  }
+
+  Widget _roundBtn(IconData i, String tip, VoidCallback f) => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Tooltip(
+            message: tip,
+            child: Tap(
+                radius: 24,
+                onTap: f,
+                child: Container(
+                    width: 48, height: 48,
+                    decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: C.line), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)]),
+                    child: Icon(i, color: C.forest)))),
+      );
+
+  Widget _card(_Sel s) {
+    final p = s.place;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 12, 18),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 18)]),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(s.name, style: head(22), maxLines: 2, overflow: TextOverflow.ellipsis)),
+          IconButton(icon: const Icon(Icons.close, color: C.muted), onPressed: () => setState(() => sel = null)),
+        ]),
+        Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(s.sub, style: body(14), maxLines: 2, overflow: TextOverflow.ellipsis)),
+        const SizedBox(height: 4),
+        Text('${s.lat.toStringAsFixed(4)}, ${s.lon.toStringAsFixed(4)}', style: body(12)),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: SizedBox(
+              width: double.infinity,
+              child: p == null
+                  ? Btn('Add to my places', () => _addToTrip(s), icon: Icons.add_location_alt_outlined)
+                  : Btn(p.visited ? 'Visited. Tap to undo' : 'Mark visited', () {
+                      p.visited = !p.visited;
+                      p.visitedOn = p.visited ? dateOnly(DateTime.now()).toIso8601String() : null;
+                      TripStore.i.touch(p: true);
+                      setState(() {});
+                    }, outlined: p.visited)),
+        ),
+      ]),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = stops[sel];
+    final t = TripStore.i.active;
     return Scaffold(
       backgroundColor: const Color(0xFFCADCC8),
-      body: LayoutBuilder(builder: (_, box) {
-        final w = box.maxWidth, h = box.maxHeight;
-        return Stack(children: [
-          Positioned.fill(child: CustomPaint(painter: _MapPainter(pts))),
-          for (var i = 0; i < pts.length; i++)
-            Positioned(
-              left: pts[i].dx * w - 22, top: pts[i].dy * h - 22,
-              child: Tap(
-                radius: 22,
-                onTap: () => setState(() => sel = i),
-                child: Container(
-                  width: 44, height: 44, alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: visited(i) ? C.forest : (i == sel ? C.sky : C.sage),
-                      border: Border.all(color: Colors.white, width: 3)),
-                  child: Text('${i + 1}', style: body(17, c: Colors.white, w: FontWeight.w800)),
-                ),
-              ),
+      body: Stack(children: [
+        FlutterMap(
+          mapController: controller,
+          options: MapOptions(
+            initialCenter: pakistan,
+            initialZoom: 5.5,
+            minZoom: 3,
+            maxZoom: 18,
+            onLongPress: (_, p) => _longPress(p),
+            onTap: (_, __) {
+              FocusScope.of(context).unfocus();
+              if (results.isNotEmpty || sel != null) {
+                setState(() {
+                  results = [];
+                  sel = null;
+                });
+              }
+            },
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.example.travel_app', // change to your applicationId
             ),
-          Positioned(left: .74 * w - 10, top: .735 * h, child: Container(
-              width: 20, height: 20,
-              decoration: BoxDecoration(color: const Color(0xFF2F6BE0), shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3)))),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(22),
-              child: Column(children: [
-                Row(children: [
-                  const BackDot(),
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: Container(
-                          height: 52, alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26)),
-                          child: Text('Hunza Valley', style: body(17, c: C.forest, w: FontWeight.w800))))
-                ]),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Wrap(spacing: 8, children: [
-                    for (var i = 0; i < 4; i++)
-                      ChoiceChip(
-                        label: Text(['All', 'Stays', 'Food', 'Sights'][i]),
-                        selected: filter == i,
-                        onSelected: (_) => setState(() => filter = i),
-                        selectedColor: C.forest,
-                        backgroundColor: Colors.white,
-                        labelStyle: TextStyle(color: filter == i ? C.cream : C.forest, fontWeight: FontWeight.w700),
-                        shape: const StadiumBorder(side: BorderSide(color: Colors.transparent)),
-                        showCheckmark: false,
+            AnimatedBuilder(
+              animation: TripStore.i,
+              builder: (_, __) {
+                final ps = t == null ? <TripPlace>[] : TripStore.i.placesFor(t.id).where((p) => p.lat != null && p.lon != null).toList();
+                return MarkerLayer(markers: [
+                  for (final p in ps)
+                    Marker(
+                      point: LatLng(p.lat!, p.lon!),
+                      width: 48, height: 48,
+                      alignment: Alignment.topCenter,
+                      child: GestureDetector(
+                        onTap: () => setState(() {
+                          results = [];
+                          sel = _Sel(p.name, t?.name ?? '', p.lat!, p.lon!, place: p);
+                        }),
+                        child: Icon(p.visited ? Icons.where_to_vote : Icons.location_on, size: 44, color: p.visited ? C.sage : C.forest),
                       ),
+                    ),
+                ]);
+              },
+            ),
+            if (sel != null && sel!.place == null)
+              MarkerLayer(markers: [
+                Marker(
+                  point: LatLng(sel!.lat, sel!.lon),
+                  width: 52, height: 52,
+                  alignment: Alignment.topCenter,
+                  child: const Icon(Icons.location_on, size: 48, color: Color(0xFF356A8A)),
+                ),
+              ]),
+            RichAttributionWidget(attributions: [TextSourceAttribution('OpenStreetMap contributors')]),
+          ],
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Column(children: [
+              Row(children: [
+                const BackDot(),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    height: 52,
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)]),
+                    child: TextField(
+                      controller: search,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) => _search(),
+                      decoration: InputDecoration(
+                        hintText: 'Search a place',
+                        border: InputBorder.none,
+                        prefixIcon: const Icon(Icons.search, color: C.sage),
+                        suffixIcon: searching
+                            ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: C.forest)))
+                            : IconButton(icon: const Icon(Icons.arrow_forward, color: C.forest), onPressed: _search),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
+                ),
+              ]),
+              if (msg != null)
+                Container(
+                  margin: const EdgeInsets.only(top: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFFF3E8BF), borderRadius: BorderRadius.circular(16)),
+                  child: Row(children: [
+                    const Icon(Icons.info_outline, size: 20, color: Color(0xFF6B5410)),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(msg!, style: body(13, c: const Color(0xFF6B5410), w: FontWeight.w600))),
                   ]),
                 ),
-              ]),
-            ),
+              if (results.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 10),
+                  constraints: const BoxConstraints(maxHeight: 290),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 12)]),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: results.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1, color: C.line),
+                      itemBuilder: (_, i) => ListTile(
+                        leading: const Icon(Icons.place_outlined, color: C.sage),
+                        title: Text(results[i].name, maxLines: 1, overflow: TextOverflow.ellipsis, style: body(15, c: C.forest, w: FontWeight.w700)),
+                        subtitle: Text(results[i].subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: body(12)),
+                        onTap: () => _pick(results[i]),
+                      ),
+                    ),
+                  ),
+                ),
+            ]),
           ),
+        ),
+        Positioned(
+          right: 16,
+          bottom: sel != null ? 250 : 70,
+          child: Column(children: [
+            _roundBtn(Icons.add, 'Zoom in', () => _zoom(1)),
+            _roundBtn(Icons.remove, 'Zoom out', () => _zoom(-1)),
+            _roundBtn(Icons.flag_outlined, 'Go to my trip', _centerOnTrip),
+          ]),
+        ),
+        if (sel == null)
           Positioned(
-            left: 16, right: 16, bottom: 24,
+            left: 16, right: 80, bottom: 28,
             child: Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                  color: Colors.white, borderRadius: BorderRadius.circular(30),
-                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 18)]),
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Expanded(child: Text('${sel + 1}. ${s[0]}', style: head(24))),
-                  Tag(s[2], C.cream, C.forest),
-                ]),
-                Text(s[1], style: body(15)),
-                const SizedBox(height: 14),
-                Row(children: [
-                  Expanded(child: Btn('Get directions', () {}, bg: C.sky, fg: C.forest)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                      child: Btn(visited(sel) ? 'Visited ✓' : 'Mark visited',
-                          () => setState(() => visited(sel) ? _visited.remove(sel) : _visited.add(sel)),
-                          outlined: true)),
-                ]),
-              ]),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(color: Colors.white.withAlpha(235), borderRadius: BorderRadius.circular(20)),
+              child: Text('Tip: press and hold anywhere on the map to drop a pin.', style: body(13, c: C.forest, w: FontWeight.w600)),
             ),
           ),
-        ]);
-      }),
+        if (sel != null) Positioned(left: 16, right: 16, bottom: 24, child: _card(sel!)),
+      ]),
     );
   }
-}
-
-class _MapPainter extends CustomPainter {
-  final List<Offset> p;
-  _MapPainter(this.p);
-  @override
-  void paint(Canvas c, Size s) {
-    Offset o(Offset f) => Offset(f.dx * s.width, f.dy * s.height);
-    c.drawRect(Rect.fromLTWH(0, s.height * .16, s.width, s.height * .72), Paint()..color = const Color(0xFFE8E0CD));
-    final river = Path()
-      ..moveTo(0, s.height * .42)
-      ..quadraticBezierTo(s.width * .3, s.height * .4, s.width * .5, s.height * .48)
-      ..quadraticBezierTo(s.width * .75, s.height * .5, s.width, s.height * .46);
-    c.drawPath(river, Paint()..color = const Color(0xFFA9C4CC)..style = PaintingStyle.stroke..strokeWidth = 40);
-    final road = Paint()..color = Colors.white..strokeWidth = 9..strokeCap = StrokeCap.round;
-    for (final e in [[0, 1], [1, 2], [2, 3]]) {
-      c.drawLine(o(p[e[0]]), o(p[e[1]]), road);
-    }
-    c.drawLine(o(p[3]), Offset(s.width * .8, s.height * .83), road);
-    c.drawLine(o(p[2]), Offset(0, s.height * .62), road);
-    c.drawLine(o(p[3]), Offset(s.width, s.height * .52), road);
-  }
-  @override
-  bool shouldRepaint(_) => false;
 }
