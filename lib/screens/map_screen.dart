@@ -3,8 +3,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../core.dart';
 import '../models/models.dart';
+import '../services/app_state.dart';
 import '../services/map_service.dart';
 import '../services/trip_store.dart';
+import 'add_trip_screen.dart';
 
 class _Sel {
   final String name, sub;
@@ -15,7 +17,10 @@ class _Sel {
 
 // ---------------- MAP (OpenStreetMap + flutter_map) ----------------
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  /// Optional: open the map on a saved place (used by Saved places).
+  final String? focusName, focusSub;
+  final double? focusLat, focusLon;
+  const MapScreen({super.key, this.focusName, this.focusSub, this.focusLat, this.focusLon});
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
@@ -32,7 +37,17 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    _centerOnTrip();
+    if (widget.focusLat != null && widget.focusLon != null) {
+      sel = _Sel(widget.focusName ?? 'Saved place', widget.focusSub ?? '', widget.focusLat!, widget.focusLon!);
+      Future.delayed(const Duration(milliseconds: 400), () {
+        if (!mounted) return;
+        try {
+          controller.move(LatLng(widget.focusLat!, widget.focusLon!), 13);
+        } catch (_) {}
+      });
+    } else {
+      _centerOnTrip();
+    }
   }
 
   @override
@@ -101,15 +116,87 @@ class _MapScreenState extends State<MapScreen> {
     setState(() => sel = g == null ? _Sel('Dropped pin', coords, p.latitude, p.longitude) : _Sel(g.name, g.subtitle, p.latitude, p.longitude));
   }
 
-  void _addToTrip(_Sel s) {
-    final t = TripStore.i.active;
-    if (t == null) return _snack('Add a trip first, then you can save places to it.');
-    if (TripStore.i.placesFor(t.id).any((p) => p.name.toLowerCase() == s.name.toLowerCase())) {
-      return _snack('"${s.name}" is already in ${t.name}.');
+  /// Ask which trip the place should go to, then add it there.
+  Future<void> _pickTrip(_Sel s) async {
+    final trips = [...TripStore.i.trips]
+      ..sort((a, b) {
+        final ca = a.status == 'Completed' ? 1 : 0, cb = b.status == 'Completed' ? 1 : 0;
+        return ca != cb ? ca.compareTo(cb) : a.start.compareTo(b.start);
+      });
+    if (trips.isEmpty) {
+      showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+                title: const Text('No trips yet'),
+                content: const Text('Create a trip first, then you can add places to it.'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Not now')),
+                  TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AddTripScreen()));
+                      },
+                      child: const Text('Add a trip')),
+                ],
+              ));
+      return;
     }
+    bool has(Trip t) => TripStore.i.placesFor(t.id).any((p) => p.name.toLowerCase() == s.name.toLowerCase());
+    final t = await showModalBottomSheet<Trip>(
+      context: context,
+      backgroundColor: C.cream,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Add to which trip?', style: head(22)),
+            const SizedBox(height: 2),
+            Text(s.name, style: body(14), maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 14),
+            Flexible(
+              child: ListView(shrinkWrap: true, children: [
+                for (final x in trips)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Box(
+                        onTap: () => Navigator.pop(ctx, x),
+                        child: Row(children: [
+                          Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(x.name, style: body(16, c: C.forest, w: FontWeight.w800)),
+                            Text('${x.destination}  ·  ${rangeText(x.start, x.end)}', style: body(13)),
+                          ])),
+                          const SizedBox(width: 8),
+                          has(x) ? const Tag('Already added', Color(0xFFD9EBDD), Color(0xFF2A6B3C)) : statusTag(x.status),
+                        ])),
+                  ),
+              ]),
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
+                width: double.infinity,
+                child: Btn('Create a new trip', () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AddTripScreen()));
+                }, outlined: true)),
+          ]),
+        ),
+      ),
+    );
+    if (t == null || !mounted) return;
+    if (has(t)) return _snack('"${s.name}" is already in ${t.name}.');
     TripStore.i.addPlace(TripPlace(id: newId(), tripId: t.id, name: s.name, lat: s.lat, lon: s.lon));
     setState(() => sel = null);
     _snack('Added to ${t.name}. Find it under Visited.');
+  }
+
+  void _toggleFav(_Sel s) {
+    final was = AppState.isMapSaved(s.lat, s.lon);
+    AppState.toggleMapSaved(s.name, s.sub, s.lat, s.lon);
+    setState(() {});
+    _snack(was ? 'Removed from favourites' : 'Saved to favourites. Open it any time from Saved places.');
   }
 
   void _zoom(double by) {
@@ -148,16 +235,23 @@ class _MapScreenState extends State<MapScreen> {
         const SizedBox(height: 14),
         Padding(
           padding: const EdgeInsets.only(right: 8),
-          child: SizedBox(
-              width: double.infinity,
-              child: p == null
-                  ? Btn('Add to my places', () => _addToTrip(s), icon: Icons.add_location_alt_outlined)
-                  : Btn(p.visited ? 'Visited. Tap to undo' : 'Mark visited', () {
-                      p.visited = !p.visited;
-                      p.visitedOn = p.visited ? dateOnly(DateTime.now()).toIso8601String() : null;
-                      TripStore.i.touch(p: true);
-                      setState(() {});
-                    }, outlined: p.visited)),
+          child: Column(children: [
+            SizedBox(
+                width: double.infinity,
+                child: p == null
+                    ? Btn('Add to my places', () => _pickTrip(s), icon: Icons.add_location_alt_outlined)
+                    : Btn(p.visited ? 'Visited. Tap to undo' : 'Mark visited', () {
+                        p.visited = !p.visited;
+                        p.visitedOn = p.visited ? dateOnly(DateTime.now()).toIso8601String() : null;
+                        TripStore.i.touch(p: true);
+                        setState(() {});
+                      }, outlined: p.visited)),
+            const SizedBox(height: 10),
+            SizedBox(
+                width: double.infinity,
+                child: Btn(AppState.isMapSaved(s.lat, s.lon) ? 'Saved to favourites (tap to remove)' : 'Add to favourites',
+                    () => _toggleFav(s), outlined: true, fg: AppState.isMapSaved(s.lat, s.lon) ? C.rust : C.forest)),
+          ]),
         ),
       ]),
     );
@@ -290,7 +384,7 @@ class _MapScreenState extends State<MapScreen> {
         ),
         Positioned(
           right: 16,
-          bottom: sel != null ? 250 : 70,
+          bottom: sel != null ? 320 : 70,
           child: Column(children: [
             _roundBtn(Icons.add, 'Zoom in', () => _zoom(1)),
             _roundBtn(Icons.remove, 'Zoom out', () => _zoom(-1)),

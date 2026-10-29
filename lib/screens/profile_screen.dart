@@ -138,9 +138,9 @@ class Profile extends StatelessWidget {
             Expanded(
                 child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: ValueListenableBuilder<List<String>>(
-                        valueListenable: AppState.saved,
-                        builder: (_, s, __) => Box(onTap: () => _open(context, const SavedPlacesScreen()), child: SizedBox(width: double.infinity, child: Column(children: [Text('${s.length}', style: head(28)), Text('Saved places', style: body(13))])))))),
+                    child: AnimatedBuilder(
+                        animation: Listenable.merge([AppState.saved, AppState.savedMap]),
+                        builder: (_, __) => Box(onTap: () => _open(context, const SavedPlacesScreen()), child: SizedBox(width: double.infinity, child: Column(children: [Text('${AppState.saved.value.length + AppState.savedMap.value.length}', style: head(28)), Text('Saved places', style: body(13))])))))),
             Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Box(onTap: () => TabNav.index.value = 2, child: SizedBox(width: double.infinity, child: Column(children: [AnimatedBuilder(animation: TripStore.i, builder: (_, __) => Text('${TripStore.i.bookings.length}', style: head(28))), Text('Bookings', style: body(13))]))))),
           ]),
           const SizedBox(height: 18),
